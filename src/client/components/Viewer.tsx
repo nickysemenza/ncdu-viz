@@ -5,6 +5,7 @@ import { buildExtColors, largestLeafExt } from "../../shared/color";
 import { depthStats } from "../../shared/treemap";
 import { humanBytes } from "../../shared/format";
 import type { ScanNode } from "../../shared/types";
+import { buildDigest, requestSummary } from "../summary";
 import { Header } from "./Header";
 import { Breadcrumb } from "./Breadcrumb";
 import { Legend } from "./Legend";
@@ -16,12 +17,14 @@ type View = "treemap" | "files";
 
 interface Props {
   scan: ParseResult;
+  /** Shared scans only: slug enables the auto-generated AI summary banner. */
+  slug?: string;
   /** Shared scans only: expiry timestamp + delete action (omitted for local view). */
   expiresAt?: string;
   onDelete?: () => Promise<void>;
 }
 
-export function Viewer({ scan, expiresAt, onDelete }: Props) {
+export function Viewer({ scan, slug, expiresAt, onDelete }: Props) {
   const { root, meta } = scan;
   const stats = useMemo(() => summarize(root), [root]);
   const colors = useMemo(() => buildExtColors(root), [root]);
@@ -31,12 +34,31 @@ export function Viewer({ scan, expiresAt, onDelete }: Props) {
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [view, setView] = useState<View>("treemap");
   const [depth, setDepth] = useState(1);
+  const [summary, setSummary] = useState<{ text: string | null; loading: boolean }>({
+    text: null,
+    loading: false,
+  });
+  const [summaryOpen, setSummaryOpen] = useState(true);
 
   // Reset focus + hover when a new scan is loaded.
   useEffect(() => {
     setFocusPath([root]);
     setHover(null);
   }, [root]);
+
+  // Shared scans: auto-generate the AI summary on load (cached server-side by slug,
+  // so viewing an existing/older scan returns instantly without re-running inference).
+  useEffect(() => {
+    if (!slug) return undefined;
+    let alive = true;
+    setSummary({ text: null, loading: true });
+    void requestSummary(buildDigest(slug, scan))
+      .then((text) => alive && setSummary({ text, loading: false }))
+      .catch(() => alive && setSummary({ text: null, loading: false }));
+    return () => {
+      alive = false;
+    };
+  }, [slug, scan]);
 
   const focus = focusPath[focusPath.length - 1] ?? root;
   const focusSegments = useMemo(() => focusPath.map((n) => n.name), [focusPath]);
@@ -85,6 +107,22 @@ export function Viewer({ scan, expiresAt, onDelete }: Props) {
           <ViewToggle view={view} onChange={setView} />
         </div>
       </div>
+      {slug && (summary.loading || summary.text) && (
+        <div className="border-b border-graphite-700 bg-graphite-900/50 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setSummaryOpen((o) => !o)}
+            className="flex items-center gap-2 text-xs font-medium text-sky-400/90"
+          >
+            <span>✨ Summary</span>
+            {summary.loading && <span className="animate-pulse text-zinc-500">generating…</span>}
+            {summary.text && <span className="text-graphite-700">{summaryOpen ? "▾" : "▸"}</span>}
+          </button>
+          {summaryOpen && summary.text && (
+            <p className="mt-1 max-w-4xl text-sm leading-relaxed text-zinc-300">{summary.text}</p>
+          )}
+        </div>
+      )}
       <div className="flex min-h-0 flex-1">
         <div className="min-h-0 min-w-0 flex-1">
           {view === "treemap" ? (

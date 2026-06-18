@@ -57,6 +57,9 @@ curl -s -o /dev/null -w "%{http_code}\n" --data-binary 'not-ncdu' $BASE/api/uplo
 ## Notes
 
 - Rerun `wrangler types` after any change to `wrangler.jsonc` bindings.
+- **Workers AI** (the `AI` binding) deploys automatically — no secret. Note it
+  always hits the real account and bills per call **even in local dev**; the
+  per-slug R2 cache keeps repeat views free.
 - The viewer treats a missing R2 object as "expired" (friendly 404), so the
   lifecycle rule needs no application-side coordination.
 

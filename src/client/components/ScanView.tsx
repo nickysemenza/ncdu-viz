@@ -45,6 +45,6 @@ export function ScanView({ slug }: Props) {
     window.location.href = "/";
   }, [slug]);
 
-  if (scan) return <Viewer scan={scan} expiresAt={expiresAt} onDelete={onDelete} />;
+  if (scan) return <Viewer scan={scan} slug={slug} expiresAt={expiresAt} onDelete={onDelete} />;
   return <ParseOverlay progress={progress} error={error} />;
 }

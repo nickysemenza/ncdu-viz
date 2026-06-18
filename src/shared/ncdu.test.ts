@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { extOf, flattenLeaves, parseNcdu, summarize } from "./ncdu";
+import { extOf, flattenLeaves, parseNcdu, summarize, topDirs } from "./ncdu";
 
 const fixture = (name: string): unknown =>
   JSON.parse(
@@ -51,6 +51,14 @@ describe("parseNcdu — real ncdu 2.9.2 fixture", () => {
     expect(leaves.find((l) => l.name === "d.bin")?.path).toBe(
       "/private/tmp/ncdu-fix/sub/deep/d.bin",
     );
+  });
+
+  it("lists the largest directories (excluding root), by size", () => {
+    const dirs = topDirs(root, 10);
+    // sub = deep(12288) + c.txt(4096) = 16384 > deep 12288 > empty 0
+    expect(dirs.map((d) => d.name)).toEqual(["sub", "deep", "empty"]);
+    expect(dirs[0]).toMatchObject({ name: "sub", size: 16384, path: "/private/tmp/ncdu-fix/sub" });
+    expect(topDirs(root, 1).length).toBe(1); // respects the limit
   });
 
   it("derives lowercased extensions, with an empty bucket for no-ext files", () => {

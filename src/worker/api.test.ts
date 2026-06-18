@@ -42,7 +42,16 @@ function fakeR2() {
     async get(key: string) {
       const e = store.get(key);
       if (!e) return null;
-      return { body: new Blob([e.body]).stream(), customMetadata: e.customMetadata };
+      return {
+        body: new Blob([e.body]).stream(),
+        customMetadata: e.customMetadata,
+        text: async () => new TextDecoder().decode(e.body),
+      };
+    },
+    async put(key: string, value: string | ArrayBuffer | Uint8Array) {
+      const body =
+        typeof value === "string" ? new TextEncoder().encode(value) : new Uint8Array(value);
+      store.set(key, { body, customMetadata: {} });
     },
     async delete(key: string) {
       store.delete(key);
@@ -55,10 +64,30 @@ function makeEnv(overrides: Partial<Record<string, unknown>> = {}): Env {
   return {
     SCANS: fakeR2(),
     UPLOAD_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
+    SUMMARY_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
+    AI: { run: vi.fn(async () => ({ response: "Mostly video files (~860 GB)." })) },
     ...overrides,
-    // The handlers only touch SCANS + UPLOAD_LIMITER; cast covers the rest.
+    // The handlers only touch SCANS / limiters / AI; cast covers the rest.
   } as unknown as Env;
 }
+
+const DIGEST = {
+  slug: "abc123def456ghi",
+  root: "/srv",
+  totalSize: 1_000_000,
+  files: 3,
+  dirs: 1,
+  topExtensions: [{ ext: "bin", total: 50 }],
+  largestFiles: [{ path: "/srv/b.bin", size: 50 }],
+  largestDirs: [{ path: "/srv/sub", size: 50 }],
+};
+
+const postSummary = (env: Env, body: unknown = DIGEST): Promise<Response> =>
+  app.request(
+    "/api/summary",
+    { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } },
+    env,
+  );
 
 const NCDU =
   '[1,2,{"progname":"ncdu","timestamp":42},\n[{"name":"/srv","asize":4096},{"name":"a.txt","dsize":100},{"name":"b.bin","dsize":50}]]';
@@ -145,6 +174,32 @@ describe("POST /api/upload + GET /api/scan", () => {
   it("404s for an unknown slug", async () => {
     const env = makeEnv();
     expect((await app.request("/api/scan/nope", {}, env)).status).toBe(404);
+  });
+
+  it("generates a summary, then serves it from cache without re-running inference", async () => {
+    const env = makeEnv();
+    const ai = (env as unknown as { AI: { run: ReturnType<typeof vi.fn> } }).AI.run;
+
+    const first = await postSummary(env);
+    expect(first.status).toBe(200);
+    expect(((await first.json()) as { summary: string }).summary).toContain("video");
+    expect(ai).toHaveBeenCalledTimes(1);
+
+    // Second request for the same slug hits the R2 cache.
+    const second = await postSummary(env);
+    expect(second.status).toBe(200);
+    expect(ai).toHaveBeenCalledTimes(1);
+  });
+
+  it("rate-limits summary generation on a cache miss", async () => {
+    const env = makeEnv({ SUMMARY_LIMITER: { limit: vi.fn(async () => ({ success: false })) } });
+    const ai = (env as unknown as { AI: { run: ReturnType<typeof vi.fn> } }).AI.run;
+    expect((await postSummary(env)).status).toBe(429);
+    expect(ai).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid digest with 400", async () => {
+    expect((await postSummary(makeEnv(), { nope: true })).status).toBe(400);
   });
 
   it("exposes an X-Scan-Expires header (created + 7 days)", async () => {

@@ -175,6 +175,27 @@ export function flattenLeaves(focus: ScanNode, focusSegments: string[]): LeafEnt
   return out;
 }
 
+export interface DirEntry {
+  name: string;
+  size: number;
+  /** Absolute path from the scan root. */
+  path: string;
+}
+
+/** The `limit` largest directories under `root` (excluding root itself), by size. */
+export function topDirs(root: ScanNode, limit: number): DirEntry[] {
+  const out: DirEntry[] = [];
+  const walk = (node: ScanNode, segs: string[]): void => {
+    if (!node.isDir) return;
+    const next = [...segs, node.name];
+    out.push({ name: node.name, size: node.size, path: joinSegments(next) });
+    for (const child of node.children ?? []) walk(child, next);
+  };
+  for (const child of root.children ?? []) walk(child, [root.name]);
+  out.sort((a, b) => b.size - a.size);
+  return out.slice(0, limit);
+}
+
 /** Walk a normalized tree and compute summary stats (used by tests + the UI header). */
 export function summarize(root: ScanNode): ScanStats {
   let files = 0;

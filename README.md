@@ -26,14 +26,17 @@ the current focus, sorted by size descending) — both follow drill-down + bread
 navigation. A **detail slider** caps the treemap's recursion depth (relative to the
 current focus), collapsing deep directories into single aggregated cells so huge
 scans stay legible; it auto-defaults to a sensible level. Shared scans show a
-**countdown to expiry** and a **delete-now** button.
+**countdown to expiry**, a **delete-now** button, and an **AI summary** (Workers AI)
+that auto-generates a plain-English overview of what's using space — cached per
+scan so repeat views are instant.
 
 ## Stack
 
 - **Cloudflare Workers + Hono** for the API; **React + Vite** SPA served via
   `@cloudflare/vite-plugin` (workerd in dev, HMR, local binding emulation).
-- **R2** for scan blobs (the only persistent store). **Workers Rate Limiting**
-  on upload.
+- **R2** for scan blobs (the only persistent store) + cached AI summaries.
+  **Workers Rate Limiting** on upload + summary. **Workers AI**
+  (`llama-3.1-8b-instruct-fast`) for the shared-scan summary.
 - **Canvas 2D** treemap rendering; **d3-hierarchy** (`treemapSquarify`) for layout.
 - **Web Worker** (Comlink) decompresses + parses off the main thread.
 - TypeScript strict throughout, shared types between Worker and client, typed
