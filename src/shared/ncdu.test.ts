@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { extOf, parseNcdu, summarize } from "./ncdu";
+import { extOf, flattenLeaves, parseNcdu, summarize } from "./ncdu";
 
 const fixture = (name: string): unknown =>
   JSON.parse(
@@ -37,6 +37,20 @@ describe("parseNcdu — real ncdu 2.9.2 fixture", () => {
   it("extracts root path + scan timestamp from the header", () => {
     expect(meta.root).toBe("/private/tmp/ncdu-fix");
     expect(meta.scannedAt).toBe(1781799785);
+  });
+
+  it("flattens all leaves sorted by size desc with absolute paths", () => {
+    const leaves = flattenLeaves(root, [meta.root]);
+    expect(leaves.length).toBe(6);
+    expect(leaves[0]).toMatchObject({ name: "photo.jpg", size: 20480 });
+    expect(leaves[0]?.path).toBe("/private/tmp/ncdu-fix/photo.jpg");
+    // sorted descending
+    const sizes = leaves.map((l) => l.size);
+    expect([...sizes].sort((a, b) => b - a)).toEqual(sizes);
+    // nested path is preserved
+    expect(leaves.find((l) => l.name === "d.bin")?.path).toBe(
+      "/private/tmp/ncdu-fix/sub/deep/d.bin",
+    );
   });
 
   it("derives lowercased extensions, with an empty bucket for no-ext files", () => {

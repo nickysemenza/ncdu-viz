@@ -46,6 +46,21 @@ export function Landing() {
     }
   };
 
+  const loadExample = async (): Promise<void> => {
+    setError(null);
+    setBusy({ kind: "parsing", progress: null });
+    try {
+      const res = await fetch("/example.json");
+      if (!res.ok) throw new Error(`example unavailable (${res.status})`);
+      const blob = await res.blob();
+      const result = await parseScan(blob, (p) => setBusy({ kind: "parsing", progress: p }));
+      setLocalScan(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not load example");
+      setBusy(null);
+    }
+  };
+
   const uploadAndShare = async (): Promise<void> => {
     if (!file) return;
     setError(null);
@@ -117,6 +132,20 @@ export function Landing() {
             </p>
           )}
         </div>
+
+        {!file && (
+          <p className="-mt-4 text-center font-mono text-xs text-zinc-600">
+            or{" "}
+            <button
+              type="button"
+              onClick={() => void loadExample()}
+              className="text-sky-400 hover:underline"
+            >
+              explore an example scan
+            </button>{" "}
+            (ncdu-viz's node_modules)
+          </p>
+        )}
 
         {file && (
           <div className="flex flex-wrap gap-3">

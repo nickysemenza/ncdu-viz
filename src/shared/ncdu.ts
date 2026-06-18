@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ScanMeta, ScanNode } from "./types";
+import { joinSegments } from "./path";
 
 /**
  * Defensive, hand-rolled parser for the ncdu `-o` JSON export.
@@ -130,6 +131,48 @@ export interface ScanStats {
   /** Max edges from the root (root = depth 0). */
   maxDepth: number;
   largestLeaf: { name: string; size: number } | null;
+}
+
+export interface LeafEntry {
+  name: string;
+  size: number;
+  ext: string;
+  /** Absolute path from the scan root. */
+  path: string;
+}
+
+/**
+ * Collect every leaf under `focus`, sorted by size descending. `focusSegments`
+ * is the absolute path chain to `focus` (inclusive) so each entry gets a full
+ * path. Used by the "Files" list view.
+ */
+export function flattenLeaves(focus: ScanNode, focusSegments: string[]): LeafEntry[] {
+  const out: LeafEntry[] = [];
+  const walk = (node: ScanNode, segs: string[]): void => {
+    if (node.isDir) {
+      for (const child of node.children ?? []) walk(child, [...segs, node.name]);
+    } else {
+      out.push({
+        name: node.name,
+        size: node.size,
+        ext: node.ext ?? "",
+        path: joinSegments([...segs, node.name]),
+      });
+    }
+  };
+  // `focusSegments` already ends at focus.name, so descend into its children.
+  if (focus.isDir) {
+    for (const child of focus.children ?? []) walk(child, focusSegments);
+  } else {
+    out.push({
+      name: focus.name,
+      size: focus.size,
+      ext: focus.ext ?? "",
+      path: joinSegments(focusSegments),
+    });
+  }
+  out.sort((a, b) => b.size - a.size);
+  return out;
 }
 
 /** Walk a normalized tree and compute summary stats (used by tests + the UI header). */

@@ -15,6 +15,11 @@ ncdu -o- / | gzip | curl -s --data-binary @- \
 
 …or drag-drop a `file.json` (optionally gzipped) in the browser — with a
 **View locally** mode that parses entirely in your browser and uploads nothing.
+The landing page also has an **example scan** to explore without any setup.
+
+The viewer toggles between the **Treemap** and a **Files** list (every file under
+the current focus, sorted by size descending) — both follow drill-down + breadcrumb
+navigation.
 
 ## Stack
 
