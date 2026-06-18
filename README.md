@@ -1,9 +1,13 @@
 # ncdu-viz
 
+### ▶ Live: **[ncdu-viz.nickysemenza.com](https://ncdu-viz.nickysemenza.com)**
+
 A public, anonymous web app that ingests the output of `ncdu -o file.json` and
 renders it as a drill-down **cushion treemap** disk-usage visualizer (think
 GrandPerspective / Disk Inventory X). No auth, no accounts, no database — scans
 live in R2 and auto-expire after 7 days.
+
+[![ncdu-viz treemap of node_modules](docs/screenshot.jpg)](https://ncdu-viz.nickysemenza.com)
 
 Two ingest paths, both returning a shareable viewer URL:
 

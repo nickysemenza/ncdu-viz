@@ -59,4 +59,17 @@ curl -s -o /dev/null -w "%{http_code}\n" --data-binary 'not-ncdu' $BASE/api/uplo
 - Rerun `wrangler types` after any change to `wrangler.jsonc` bindings.
 - The viewer treats a missing R2 object as "expired" (friendly 404), so the
   lifecycle rule needs no application-side coordination.
-- Optional CI: connect Workers Builds to the repo for deploy-on-push.
+
+## CI (GitHub Actions)
+
+`.github/workflows/ci.yml` runs format-check, lint, typecheck, test, and build on
+every push/PR. On push to `main` it also deploys — but only once you add the
+Cloudflare API token as a repo secret:
+
+```bash
+# create a token scoped to "Edit Cloudflare Workers" at
+# https://dash.cloudflare.com/profile/api-tokens, then:
+gh secret set CLOUDFLARE_API_TOKEN --repo nickysemenza/ncdu-viz
+```
+
+Until the secret exists, the deploy step no-ops (the workflow stays green).
