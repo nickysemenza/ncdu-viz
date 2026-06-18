@@ -23,7 +23,10 @@ The landing page also has an **example scan** to explore without any setup.
 
 The viewer toggles between the **Treemap** and a **Files** list (every file under
 the current focus, sorted by size descending) — both follow drill-down + breadcrumb
-navigation.
+navigation. A **detail slider** caps the treemap's recursion depth (relative to the
+current focus), collapsing deep directories into single aggregated cells so huge
+scans stay legible; it auto-defaults to a sensible level. Shared scans show a
+**countdown to expiry** and a **delete-now** button.
 
 ## Stack
 

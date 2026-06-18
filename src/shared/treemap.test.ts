@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseNcdu } from "./ncdu";
-import { layoutTreemap, type TreemapRect } from "./treemap";
+import { depthStats, layoutTreemap, type TreemapRect } from "./treemap";
 
 const W = 1000;
 const H = 700;
@@ -54,6 +54,15 @@ describe("layoutTreemap — geometry sanity (no padding)", () => {
         expect(overlaps(a, b), `${a.node.name} overlaps ${b.node.name}`).toBe(false);
       }
     }
+  });
+
+  it("computes depth range and an adaptive default", () => {
+    // sample tree: max relative depth 3 (root→sub→deep→d.bin).
+    expect(depthStats(sample).maxDepth).toBe(3);
+    // small tree fits any target → full depth suggested.
+    expect(depthStats(sample).suggested).toBe(3);
+    // tight target forces a shallower default (collapse deeper dirs).
+    expect(depthStats(sample, 5).suggested).toBeLessThan(3);
   });
 
   it("directory groups enclose their children", () => {

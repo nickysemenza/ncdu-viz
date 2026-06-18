@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { humanBytes } from "./format";
-import { buildExtColors, OTHER_LABEL } from "./color";
+import { humanBytes, relativeExpiry } from "./format";
+import { buildExtColors, largestLeafExt, OTHER_LABEL } from "./color";
 import type { ScanNode } from "./types";
 
 describe("humanBytes", () => {
@@ -11,6 +11,18 @@ describe("humanBytes", () => {
     expect(humanBytes(20480)).toBe("20.5 KB");
     expect(humanBytes(30063550528)).toBe("30.1 GB");
     expect(humanBytes(4_900_000_000)).toBe("4.9 GB");
+  });
+});
+
+describe("relativeExpiry", () => {
+  const now = Date.parse("2026-06-18T00:00:00Z");
+  it("formats days/hours and minutes remaining", () => {
+    expect(relativeExpiry("2026-06-24T22:00:00Z", now)).toBe("expires in 6d 22h");
+    expect(relativeExpiry("2026-06-18T05:30:00Z", now)).toBe("expires in 5h 30m");
+    expect(relativeExpiry("2026-06-18T00:45:00Z", now)).toBe("expires in 45m");
+  });
+  it("reports expired once past", () => {
+    expect(relativeExpiry("2026-06-17T00:00:00Z", now)).toBe("expired");
   });
 });
 
@@ -45,6 +57,24 @@ describe("buildExtColors", () => {
     expect(colorFor("jpg")).toBe(map.get("jpg"));
     expect(colorFor("jpg")).not.toBe(colorFor("txt"));
     expect(colorFor("never-seen")).toBe(colorFor("also-never")); // both OTHER
+  });
+
+  it("maps each directory to its largest-leaf extension (largestLeafExt)", () => {
+    const deep: ScanNode = {
+      name: "deep",
+      size: 0,
+      isDir: true,
+      children: [leaf("big.zip", 9999, "zip")],
+    };
+    const tree: ScanNode = {
+      name: "/",
+      size: 0,
+      isDir: true,
+      children: [leaf("a.jpg", 100, "jpg"), deep],
+    };
+    const map = largestLeafExt(tree);
+    expect(map.get(tree)).toBe("zip"); // big.zip is the largest leaf overall
+    expect(map.get(deep)).toBe("zip");
   });
 
   it("buckets extensions beyond the top-N into 'other'", () => {

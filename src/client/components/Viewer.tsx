@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ParseResult } from "../../shared/ncdu";
 import { flattenLeaves, summarize } from "../../shared/ncdu";
-import { buildExtColors } from "../../shared/color";
+import { buildExtColors, largestLeafExt } from "../../shared/color";
+import { depthStats } from "../../shared/treemap";
 import { humanBytes } from "../../shared/format";
 import type { ScanNode } from "../../shared/types";
 import { Header } from "./Header";
@@ -15,16 +16,21 @@ type View = "treemap" | "files";
 
 interface Props {
   scan: ParseResult;
+  /** Shared scans only: expiry timestamp + delete action (omitted for local view). */
+  expiresAt?: string;
+  onDelete?: () => Promise<void>;
 }
 
-export function Viewer({ scan }: Props) {
+export function Viewer({ scan, expiresAt, onDelete }: Props) {
   const { root, meta } = scan;
   const stats = useMemo(() => summarize(root), [root]);
   const colors = useMemo(() => buildExtColors(root), [root]);
+  const domExt = useMemo(() => largestLeafExt(root), [root]);
 
   const [focusPath, setFocusPath] = useState<ScanNode[]>([root]);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [view, setView] = useState<View>("treemap");
+  const [depth, setDepth] = useState(1);
 
   // Reset focus + hover when a new scan is loaded.
   useEffect(() => {
@@ -35,14 +41,27 @@ export function Viewer({ scan }: Props) {
   const focus = focusPath[focusPath.length - 1] ?? root;
   const focusSegments = useMemo(() => focusPath.map((n) => n.name), [focusPath]);
 
+  // Depth range + adaptive default per focus; re-default the slider on drill.
+  const { maxDepth, suggested } = useMemo(() => depthStats(focus), [focus]);
+  useEffect(() => {
+    setDepth(suggested);
+  }, [suggested]);
+  const clampedDepth = Math.min(depth, maxDepth);
+
+  // Collapsed directory cells are colored by their dominant (largest-leaf) ext.
+  const colorOf = useCallback(
+    (node: ScanNode) => colors.colorFor(node.isDir ? domExt.get(node) : node.ext),
+    [colors, domExt],
+  );
+
   // Only flatten when the Files view is active (cheap to skip for big trees).
   const leaves = useMemo(
     () => (view === "files" ? flattenLeaves(focus, focusSegments) : []),
     [view, focus, focusSegments],
   );
 
-  const onDrill = useCallback((child: ScanNode) => {
-    setFocusPath((p) => [...p, child]);
+  const onDrill = useCallback((path: ScanNode[]) => {
+    if (path.length > 0) setFocusPath((p) => [...p, ...path]);
   }, []);
   const onJump = useCallback((i: number) => {
     setFocusPath((p) => p.slice(0, i + 1));
@@ -50,10 +69,21 @@ export function Viewer({ scan }: Props) {
 
   return (
     <div className="flex h-dvh flex-col bg-graphite-950 text-zinc-200">
-      <Header meta={meta} fileCount={stats.files} dirCount={stats.dirs} />
-      <div className="flex items-center justify-between border-b border-graphite-700 bg-graphite-900 pr-3">
+      <Header
+        meta={meta}
+        fileCount={stats.files}
+        dirCount={stats.dirs}
+        expiresAt={expiresAt}
+        onDelete={onDelete}
+      />
+      <div className="flex items-center justify-between gap-4 border-b border-graphite-700 bg-graphite-900 pr-3">
         <Breadcrumb path={focusPath} onJump={onJump} />
-        <ViewToggle view={view} onChange={setView} />
+        <div className="flex shrink-0 items-center gap-4">
+          {view === "treemap" && maxDepth >= 2 && (
+            <DepthSlider value={clampedDepth} max={maxDepth} onChange={setDepth} />
+          )}
+          <ViewToggle view={view} onChange={setView} />
+        </div>
       </div>
       <div className="flex min-h-0 flex-1">
         <div className="min-h-0 min-w-0 flex-1">
@@ -61,7 +91,8 @@ export function Viewer({ scan }: Props) {
             <TreemapCanvas
               focus={focus}
               focusSegments={focusSegments}
-              colorFor={colors.colorFor}
+              maxDepth={clampedDepth}
+              colorOf={colorOf}
               onHover={setHover}
               onDrill={onDrill}
             />
@@ -82,6 +113,34 @@ export function Viewer({ scan }: Props) {
         }
       />
     </div>
+  );
+}
+
+function DepthSlider({
+  value,
+  max,
+  onChange,
+}: {
+  value: number;
+  max: number;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <label className="flex shrink-0 items-center gap-2 text-xs text-zinc-500">
+      <span className="hidden sm:inline">Detail</span>
+      <input
+        type="range"
+        min={1}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-1 w-24 cursor-pointer accent-sky-500"
+        title={`Depth ${value} of ${max}`}
+      />
+      <span className="w-8 font-mono tabular-nums text-zinc-400">
+        {value}/{max}
+      </span>
+    </label>
   );
 }
 

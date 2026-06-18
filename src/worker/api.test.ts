@@ -44,6 +44,9 @@ function fakeR2() {
       if (!e) return null;
       return { body: new Blob([e.body]).stream(), customMetadata: e.customMetadata };
     },
+    async delete(key: string) {
+      store.delete(key);
+    },
   };
   return bucket;
 }
@@ -142,5 +145,23 @@ describe("POST /api/upload + GET /api/scan", () => {
   it("404s for an unknown slug", async () => {
     const env = makeEnv();
     expect((await app.request("/api/scan/nope", {}, env)).status).toBe(404);
+  });
+
+  it("exposes an X-Scan-Expires header (created + 7 days)", async () => {
+    const env = makeEnv();
+    const slug = await slugOf(await upload(env, NCDU));
+    const scan = await app.request(`/api/scan/${slug}`, {}, env);
+    const expires = scan.headers.get("x-scan-expires");
+    expect(expires).toBeTruthy();
+    expect(Date.parse(expires ?? "")).toBeGreaterThan(Date.now());
+  });
+
+  it("DELETE removes the scan (subsequent GET → 404)", async () => {
+    const env = makeEnv();
+    const slug = await slugOf(await upload(env, NCDU));
+    expect((await app.request(`/api/scan/${slug}`, {}, env)).status).toBe(200);
+    const del = await app.request(`/api/scan/${slug}`, { method: "DELETE" }, env);
+    expect(del.status).toBe(204);
+    expect((await app.request(`/api/scan/${slug}`, {}, env)).status).toBe(404);
   });
 });

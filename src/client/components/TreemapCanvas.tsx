@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ScanNode } from "../../shared/types";
 import { layoutTreemap, type TreemapRect } from "../../shared/treemap";
-import { chainAt, drawTreemap } from "../treemapRender";
+import { drawTreemap, frontier, frontierAt } from "../treemapRender";
 
 export interface HoverInfo {
-  /** Absolute path segments from scan root to the hovered node. */
+  /** Absolute path segments from scan root to the hovered cell. */
   segments: string[];
   node: ScanNode;
 }
@@ -13,18 +13,32 @@ interface Props {
   focus: ScanNode;
   /** Absolute name chain from scan root to `focus`, inclusive. */
   focusSegments: string[];
-  colorFor: (ext: string | undefined) => string;
+  /** Max render depth relative to focus (focus = 0); deeper dirs are collapsed. */
+  maxDepth: number;
+  colorOf: (node: ScanNode) => string;
   onHover: (info: HoverInfo | null) => void;
-  onDrill: (child: ScanNode) => void;
+  /** Append this path of directories (focus→…→target) to the focus chain. */
+  onDrill: (path: ScanNode[]) => void;
 }
 
-export function TreemapCanvas({ focus, focusSegments, colorFor, onHover, onDrill }: Props) {
+interface HoverState {
+  cell: TreemapRect;
+  group: TreemapRect | undefined;
+}
+
+export function TreemapCanvas({
+  focus,
+  focusSegments,
+  maxDepth,
+  colorOf,
+  onHover,
+  onDrill,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const [hoverChain, setHoverChain] = useState<TreemapRect[] | null>(null);
+  const [hover, setHover] = useState<HoverState | null>(null);
 
-  // Track container size for a crisp, responsive canvas.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return undefined;
@@ -41,11 +55,14 @@ export function TreemapCanvas({ focus, focusSegments, colorFor, onHover, onDrill
     return layoutTreemap(focus, size.w, size.h, { paddingInner: 1 });
   }, [focus, size]);
 
-  // Reset hover whenever the focused subtree changes.
+  // The drawn cells (frontier) only change with layout/depth, not on hover.
+  const cells = useMemo(() => (layout ? frontier(layout, maxDepth) : []), [layout, maxDepth]);
+
+  // Reset hover when the focused subtree or depth changes.
   useEffect(() => {
-    setHoverChain(null);
+    setHover(null);
     onHover(null);
-  }, [focus, onHover]);
+  }, [focus, maxDepth, onHover]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -56,13 +73,13 @@ export function TreemapCanvas({ focus, focusSegments, colorFor, onHover, onDrill
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawTreemap(ctx, layout, {
-      colorFor,
+    drawTreemap(ctx, cells, {
+      colorOf,
       width: size.w,
       height: size.h,
-      hoverChain: hoverChain ?? undefined,
+      hover: hover ?? undefined,
     });
-  }, [layout, size, colorFor, hoverChain]);
+  }, [cells, layout, size, colorOf, hover]);
 
   const pointFromEvent = (e: React.MouseEvent): { x: number; y: number } | null => {
     const canvas = canvasRef.current;
@@ -75,23 +92,21 @@ export function TreemapCanvas({ focus, focusSegments, colorFor, onHover, onDrill
     if (!layout) return;
     const p = pointFromEvent(e);
     if (!p) return;
-    const chain = chainAt(layout, p.x, p.y);
-    if (chain.length === 0) {
-      setHoverChain(null);
+    const { chain, cell } = frontierAt(layout, maxDepth, p.x, p.y);
+    if (!cell) {
+      setHover(null);
       onHover(null);
       return;
     }
-    setHoverChain(chain);
-    const leaf = chain[chain.length - 1];
-    if (leaf) {
-      // focusSegments already ends at `focus` (== chain[0]); append the rest.
-      const segments = [...focusSegments, ...chain.slice(1).map((c) => c.node.name)];
-      onHover({ segments, node: leaf.node });
-    }
+    const group = chain.find((r) => r.depth === 1);
+    setHover({ cell, group });
+    const ancestors = chain.filter((r) => r.depth <= cell.depth);
+    const segments = [...focusSegments, ...ancestors.slice(1).map((c) => c.node.name)];
+    onHover({ segments, node: cell.node });
   };
 
   const handleLeave = (): void => {
-    setHoverChain(null);
+    setHover(null);
     onHover(null);
   };
 
@@ -99,9 +114,18 @@ export function TreemapCanvas({ focus, focusSegments, colorFor, onHover, onDrill
     if (!layout) return;
     const p = pointFromEvent(e);
     if (!p) return;
-    const group = chainAt(layout, p.x, p.y).find((r) => r.depth === 1);
-    if (group?.node.isDir && (group.node.children?.length ?? 0) > 0) {
-      onDrill(group.node);
+    const { chain } = frontierAt(layout, maxDepth, p.x, p.y);
+    // Drill into the deepest visible directory under the cursor, appending the
+    // full intermediate path (depth 1..target) so the breadcrumb stays complete.
+    const target = chain
+      .filter(
+        (r) =>
+          r.node.isDir && r.depth >= 1 && r.depth <= maxDepth && (r.node.children?.length ?? 0) > 0,
+      )
+      .pop();
+    if (target) {
+      const path = chain.filter((r) => r.depth >= 1 && r.depth <= target.depth).map((r) => r.node);
+      onDrill(path);
     }
   };
 

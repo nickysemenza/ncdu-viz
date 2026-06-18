@@ -46,6 +46,27 @@ export interface ExtColors {
   colorFor: (ext: string | undefined) => string;
 }
 
+/**
+ * Map each directory node to the extension of its single largest leaf
+ * descendant — used to color a collapsed/aggregated directory cell so it still
+ * reads as "mostly <type>". One O(n) post-order pass.
+ */
+export function largestLeafExt(root: ScanNode): Map<ScanNode, string> {
+  const map = new Map<ScanNode, string>();
+  const walk = (n: ScanNode): { ext: string; size: number } => {
+    if (!n.isDir) return { ext: n.ext ?? "", size: n.size };
+    let best = { ext: "", size: -1 };
+    for (const child of n.children ?? []) {
+      const r = walk(child);
+      if (r.size > best.size) best = r;
+    }
+    map.set(n, best.ext);
+    return best;
+  };
+  walk(root);
+  return map;
+}
+
 /** Aggregate leaf sizes per extension and assign the top-N a palette color. */
 export function buildExtColors(root: ScanNode): ExtColors {
   const totals = new Map<string, number>();

@@ -24,6 +24,42 @@ export interface TreemapOptions {
 }
 
 /**
+ * Depth range + an adaptive default for the detail slider, relative to `focus`
+ * (focus = depth 0). The default is the deepest level whose drawn-cell count
+ * (leaves at-or-above it + directories collapsed at it) stays under `target`,
+ * so a huge scan opens clean instead of as thousands of sub-pixel cells.
+ */
+export function depthStats(
+  focus: ScanNode,
+  target = 1500,
+): { maxDepth: number; suggested: number } {
+  const leavesAt: number[] = [];
+  const dirsAt: number[] = [];
+  let maxDepth = 0;
+
+  const walk = (n: ScanNode, d: number): void => {
+    if (d > maxDepth) maxDepth = d;
+    if (n.isDir && (n.children?.length ?? 0) > 0) {
+      dirsAt[d] = (dirsAt[d] ?? 0) + 1;
+      for (const child of n.children ?? []) walk(child, d + 1);
+    } else {
+      leavesAt[d] = (leavesAt[d] ?? 0) + 1;
+    }
+  };
+  walk(focus, 0);
+
+  let cumLeaves = 0;
+  let suggested = 1;
+  for (let d = 0; d <= maxDepth; d++) {
+    cumLeaves += leavesAt[d] ?? 0;
+    const drawn = cumLeaves + (dirsAt[d] ?? 0);
+    if (drawn <= target) suggested = d;
+    else break;
+  }
+  return { maxDepth, suggested: Math.max(1, suggested) };
+}
+
+/**
  * Lay out a (sub)tree with d3-hierarchy's squarified treemap.
  *
  * We `.sum()` over leaves only (returning 0 for internal nodes) because each
