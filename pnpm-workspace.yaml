@@ -1,3 +1,14 @@
+# Single-package repo, but this file must exist for native build-script approvals.
+# `packages` is required by pnpm 10 (used by Cloudflare Workers Builds).
+# The two pnpm versions read different approval keys, so we set both:
+#   - `onlyBuiltDependencies` → pnpm 10
+#   - `allowBuilds`           → pnpm 11
+packages:
+  - .
+onlyBuiltDependencies:
+  - esbuild
+  - workerd
+  - sharp
 allowBuilds:
   esbuild: true
   sharp: true
