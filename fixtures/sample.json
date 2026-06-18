@@ -1,0 +1,21 @@
+[
+  1,
+  2,
+  { "progname": "ncdu", "progver": "2.9.2", "timestamp": 1781799785 },
+  [
+    { "name": "/private/tmp/ncdu-fix", "asize": 224, "dev": 16777230 },
+    { "name": "b.log", "asize": 5000, "dsize": 8192 },
+    [{ "name": "empty", "asize": 64 }],
+    { "name": "photo.jpg", "asize": 20000, "dsize": 20480 },
+    [
+      { "name": "sub", "asize": 128 },
+      [
+        { "name": "deep", "asize": 128 },
+        { "name": "noext", "asize": 1, "dsize": 4096 },
+        { "name": "d.bin", "asize": 7000, "dsize": 8192 }
+      ],
+      { "name": "c.txt", "asize": 3000, "dsize": 4096 }
+    ],
+    { "name": "a.txt", "asize": 10000, "dsize": 12288 }
+  ]
+]

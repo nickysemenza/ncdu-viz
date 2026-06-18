@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ncdu-viz",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-06-18",
+  "observability": {
+    "enabled": true,
+  },
+  // Custom domain (requires the nickysemenza.com zone in this account).
+  "routes": [{ "pattern": "ncdu-viz.nickysemenza.com", "custom_domain": true }],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // API routes hit the Worker first; everything else is served from static assets (SPA).
+    "run_worker_first": ["/api/*"],
+  },
+  "r2_buckets": [
+    {
+      "binding": "SCANS",
+      "bucket_name": "ncdu-viz-scans",
+      // Local `wrangler dev`/vite use a simulated R2, so preview only matters for
+      // `--remote` dev. R2 bindings target a bucket (not a sub-path), so we just
+      // reuse the prod bucket rather than maintaining a second one.
+      "preview_bucket_name": "ncdu-viz-scans",
+    },
+  ],
+  // Workers Rate Limiting (GA Sept 2025). namespace_id is an arbitrary, unique-per-account id.
+  "ratelimits": [
+    {
+      "name": "UPLOAD_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 },
+    },
+  ],
+}

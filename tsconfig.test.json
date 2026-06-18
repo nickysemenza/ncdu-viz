@@ -1,0 +1,10 @@
+{
+  // Test files run under Node (vitest) and use node: builtins for fixtures.
+  // Node's ambient globals are scoped here so they don't leak into app/worker code.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src/**/*.test.ts", "worker-configuration.d.ts"]
+}

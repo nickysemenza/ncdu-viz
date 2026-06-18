@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "import"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    // We use the automatic JSX runtime (jsx: "react-jsx"), so React need not be in scope.
+    "react/react-in-jsx-scope": "off",
+    // Side-effect imports (CSS, web-worker registration) are intentional here.
+    "import/no-unassigned-import": "off"
+  },
+  "ignorePatterns": ["dist", "node_modules", "worker-configuration.d.ts"]
+}
