@@ -93,7 +93,9 @@ See [DEPLOY.md](DEPLOY.md).
 
 ## TODO
 
-- Dedupe hard links by `ino` (v1 sums as-is, as ncdu already counts each inode
-  once per tree).
 - Very large scans (multi-GB JSON) would move to a server-side aggregate + lazy
   subtree loading; v1 parses client-side in a Web Worker (fine to ~hundreds of MB).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
