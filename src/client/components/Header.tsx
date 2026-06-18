@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ScanMeta } from "../../shared/types";
 import { humanBytes, relativeExpiry } from "../../shared/format";
+import { GithubLink } from "./GithubLink";
 
 interface Props {
   meta: ScanMeta;
@@ -42,6 +43,7 @@ export function Header({ meta, fileCount, dirCount, expiresAt, onDelete }: Props
         </span>
       )}
       {onDelete && <DeleteButton onDelete={onDelete} />}
+      <GithubLink className="self-center" />
     </header>
   );
 }

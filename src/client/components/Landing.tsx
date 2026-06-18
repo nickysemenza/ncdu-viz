@@ -6,6 +6,7 @@ import type { UploadResponse } from "../../shared/dto";
 import { Viewer } from "./Viewer";
 import { ParseOverlay } from "./ParseOverlay";
 import { CurlRecipe } from "./CurlRecipe";
+import { GithubLink } from "./GithubLink";
 
 type Busy = { kind: "parsing"; progress: ParseProgress | null } | { kind: "uploading" } | null;
 
@@ -99,12 +100,15 @@ export function Landing() {
   return (
     <div className="min-h-dvh bg-graphite-950 px-6 py-12 text-zinc-200">
       <div className="mx-auto flex max-w-2xl flex-col gap-8">
-        <header className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">ncdu-viz</h1>
-          <p className="font-mono text-sm text-zinc-400">
-            Explore an <span className="text-zinc-200">ncdu -o</span> scan as a drill-down cushion
-            treemap.
-          </p>
+        <header className="flex items-start justify-between gap-4">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold tracking-tight">ncdu-viz</h1>
+            <p className="font-mono text-sm text-zinc-400">
+              Explore an <span className="text-zinc-200">ncdu -o</span> scan as a drill-down cushion
+              treemap.
+            </p>
+          </div>
+          <GithubLink label className="mt-1 shrink-0" />
         </header>
 
         <div
