@@ -41,32 +41,5 @@ jobs:
       - name: Build
         run: pnpm build
 
-  deploy:
-    name: Deploy to Cloudflare
-    needs: check
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    # Surfaced from the secret so the deploy step can no-op when it isn't set
-    # (keeps the workflow green for forks / before the secret is added).
-    env:
-      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Deploy
-        if: env.CF_API_TOKEN != ''
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler deploy
+# Deploys are handled by Cloudflare Workers Builds (git integration), not here —
+# this workflow is CI-only.

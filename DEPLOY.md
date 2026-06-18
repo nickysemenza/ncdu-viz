@@ -60,16 +60,17 @@ curl -s -o /dev/null -w "%{http_code}\n" --data-binary 'not-ncdu' $BASE/api/uplo
 - The viewer treats a missing R2 object as "expired" (friendly 404), so the
   lifecycle rule needs no application-side coordination.
 
-## CI (GitHub Actions)
+## CI / CD
 
-`.github/workflows/ci.yml` runs format-check, lint, typecheck, test, and build on
-every push/PR. On push to `main` it also deploys — but only once you add the
-Cloudflare API token as a repo secret:
+- **GitHub Actions** (`.github/workflows/ci.yml`) — CI only: format-check, lint,
+  typecheck, test, build on every push/PR.
+- **Cloudflare Workers Builds** (git integration) — deploys on push to `main`.
+  Configure in the Cloudflare dashboard:
+  - Build command: `pnpm run build`
+  - Deploy command: `npx wrangler deploy` (default; picks up `dist/ncdu_viz/wrangler.json`)
 
-```bash
-# create a token scoped to "Edit Cloudflare Workers" at
-# https://dash.cloudflare.com/profile/api-tokens, then:
-gh secret set CLOUDFLARE_API_TOKEN --repo nickysemenza/ncdu-viz
-```
+  Note: the build environment uses pnpm 10, which is why `pnpm-workspace.yaml`
+  carries both `onlyBuiltDependencies` (pnpm 10) and `allowBuilds` (pnpm 11) plus
+  a `packages` field.
 
-Until the secret exists, the deploy step no-ops (the workflow stays green).
+To deploy from the CLI instead, see "Deploy" above (`pnpm deploy`).
