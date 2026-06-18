@@ -14,6 +14,9 @@ export function Landing() {
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [localScan, setLocalScan] = useState<ParseResult | null>(null);
+  // Set only for the bundled example (a public, non-sensitive scan) so it shows the
+  // AI summary; real drag-drop "view locally" scans stay sluggless → no summary.
+  const [localSlug, setLocalSlug] = useState<string | undefined>(undefined);
   const [share, setShare] = useState<UploadResponse | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -23,6 +26,7 @@ export function Landing() {
     setBusy(null);
     setError(null);
     setLocalScan(null);
+    setLocalSlug(undefined);
     setShare(null);
   }, []);
 
@@ -39,6 +43,7 @@ export function Landing() {
     setBusy({ kind: "parsing", progress: null });
     try {
       const result = await parseScan(file, (p) => setBusy({ kind: "parsing", progress: p }));
+      setLocalSlug(undefined);
       setLocalScan(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "could not parse scan");
@@ -54,6 +59,7 @@ export function Landing() {
       if (!res.ok) throw new Error(`example unavailable (${res.status})`);
       const blob = await res.blob();
       const result = await parseScan(blob, (p) => setBusy({ kind: "parsing", progress: p }));
+      setLocalSlug("example"); // stable slug → cached AI summary for the example
       setLocalScan(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "could not load example");
@@ -77,8 +83,11 @@ export function Landing() {
   if (localScan) {
     return (
       <div className="flex h-dvh flex-col">
-        <Viewer scan={localScan} />
-        <BackBar onBack={reset} label="parsed locally · nothing uploaded" />
+        <Viewer scan={localScan} slug={localSlug} />
+        <BackBar
+          onBack={reset}
+          label={localSlug ? "example scan" : "parsed locally · nothing uploaded"}
+        />
       </div>
     );
   }
