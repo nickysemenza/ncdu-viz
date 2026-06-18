@@ -81,6 +81,8 @@ export async function handleSummary(c: Ctx): Promise<Response> {
   }
   if (!summary) return c.text("summary unavailable\n", 502);
 
-  await env.SCANS.put(cacheKey, summary);
+  await env.SCANS.put(cacheKey, summary, {
+    httpMetadata: { contentType: "text/plain; charset=utf-8" },
+  });
   return c.json({ summary } satisfies SummaryResponse);
 }
