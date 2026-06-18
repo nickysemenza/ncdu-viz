@@ -109,6 +109,65 @@ describe("parseNcdu — defensive behavior", () => {
   });
 });
 
+describe("parseNcdu — hard-link dedupe", () => {
+  // Two dirs each hold a hard link to the same inode (both flagged hlnkc:true,
+  // nlink:2, shared ino) plus two *distinct* same-named files with no ino.
+  const payload = [
+    1,
+    2,
+    { progname: "ncdu", timestamp: 1 },
+    [
+      { name: "/root", asize: 4096, dev: 1 },
+      [
+        { name: "a" },
+        { name: "linked.bin", dsize: 1000, ino: 42, hlnkc: true, nlink: 2 },
+        { name: "copy.txt", dsize: 500 }, // distinct file, no ino
+      ],
+      [
+        { name: "b" },
+        { name: "linked.bin", dsize: 1000, ino: 42, hlnkc: true, nlink: 2 },
+        { name: "copy.txt", dsize: 500 }, // distinct file, no ino
+      ],
+    ],
+  ];
+  const { root, meta } = parseNcdu(payload);
+  const stats = summarize(root);
+
+  it("counts a hard-linked inode's bytes once, not per link", () => {
+    // 1000 (inode once) + 500 + 500 (two distinct copies) = 2000, not 2500.
+    expect(stats.totalSize).toBe(2000);
+    expect(meta.totalSize).toBe(2000);
+  });
+
+  it("excludes the secondary hard link from the file count", () => {
+    // linked.bin (1) + copy.txt (2) = 3 unique files; the dup is not counted.
+    expect(stats.files).toBe(3);
+  });
+
+  it("lists each inode once but keeps genuinely distinct files", () => {
+    const leaves = flattenLeaves(root, [meta.root]);
+    expect(leaves.filter((l) => l.name === "linked.bin").length).toBe(1);
+    // regression guard: same-named files with no shared inode are NOT deduped.
+    expect(leaves.filter((l) => l.name === "copy.txt").length).toBe(2);
+  });
+
+  it("surfaces nlink on the surviving hard link for the UI badge", () => {
+    const leaves = flattenLeaves(root, [meta.root]);
+    expect(leaves.find((l) => l.name === "linked.bin")?.nlink).toBe(2);
+    expect(leaves.find((l) => l.name === "copy.txt")?.nlink).toBeUndefined();
+  });
+
+  it("names the dropped sibling path(s) on the kept hard link", () => {
+    const leaves = flattenLeaves(root, [meta.root]);
+    const kept = leaves.find((l) => l.name === "linked.bin");
+    // the kept row is /root/a/linked.bin; its sibling is /root/b/linked.bin.
+    expect(kept?.links).toEqual(["/root/b/linked.bin"]);
+    expect(kept?.path).toBe("/root/a/linked.bin");
+    // non-hard-linked files carry no links.
+    expect(leaves.find((l) => l.name === "copy.txt")?.links).toBeUndefined();
+  });
+});
+
 // Optional: if the user drops their real test.json (the ~30 GB scan) at
 // fixtures/test.json, assert the documented totals. Skipped if absent.
 const bigPath = fileURLToPath(new URL("../../fixtures/test.json", import.meta.url));

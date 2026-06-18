@@ -18,6 +18,15 @@ function tail(path: string): { parent: string; name: string } {
   return { parent: parent ?? "", name };
 }
 
+/** Tooltip for the "H" badge — names the other paths sharing this inode's bytes. */
+function hardlinkTitle(leaf: LeafEntry): string {
+  const head = `Hard link (${leaf.nlink} links) — bytes counted once here.`;
+  if (leaf.links && leaf.links.length > 0) {
+    return `${head}\nAlso linked at:\n${leaf.links.join("\n")}`;
+  }
+  return `${head}\nOther links are outside this scan.`;
+}
+
 export function FilesList({ leaves, colorFor }: Props) {
   const shown = useMemo(() => leaves.slice(0, MAX_ROWS), [leaves]);
 
@@ -43,6 +52,14 @@ export function FilesList({ leaves, colorFor }: Props) {
               <span className="min-w-0 flex-1 truncate">
                 {parent && <span className="text-zinc-600">{parent}/</span>}
                 <span className="text-zinc-200">{name}</span>
+                {leaf.nlink ? (
+                  <span
+                    className="ml-1.5 rounded-[2px] bg-graphite-700 px-1 text-[10px] text-zinc-400"
+                    title={hardlinkTitle(leaf)}
+                  >
+                    H{leaf.nlink}
+                  </span>
+                ) : null}
               </span>
               <span className="w-20 shrink-0 text-right text-zinc-300 tabular-nums">
                 {humanBytes(leaf.size)}
