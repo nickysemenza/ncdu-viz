@@ -101,8 +101,12 @@ async function gzip(text: string): Promise<Uint8Array> {
 
 const upload = (env: Env, body: BodyInit, headers?: Record<string, string>): Promise<Response> =>
   app.request("/api/upload", { method: "POST", body, headers }, env);
-const slugOf = async (res: Response): Promise<string> =>
-  (await res.text()).trim().split("/v/")[1] ?? "";
+// The response body is two lines (viewer URL, then report URL), so parse the
+// first line specifically rather than splitting the whole body.
+const slugOf = async (res: Response): Promise<string> => {
+  const firstLine = (await res.text()).split("\n")[0] ?? "";
+  return firstLine.trim().split("/v/")[1] ?? "";
+};
 
 describe("POST /api/upload + GET /api/scan", () => {
   it("multipart-stores a gzipped upload and serves it back as a single gzip stream", async () => {
@@ -218,5 +222,101 @@ describe("POST /api/upload + GET /api/scan", () => {
     const del = await app.request(`/api/scan/${slug}`, { method: "DELETE" }, env);
     expect(del.status).toBe(204);
     expect((await app.request(`/api/scan/${slug}`, {}, env)).status).toBe(404);
+  });
+});
+
+describe("POST /api/upload — response shape", () => {
+  it("keeps the viewer URL alone on line 1 so existing pipelines still work", async () => {
+    const env = makeEnv();
+    const body = await (await upload(env, NCDU)).text();
+    const [first, second] = body.split("\n");
+    expect(first).toMatch(/^https?:\/\/[^\s]+\/v\/[A-Za-z0-9]+$/);
+    expect(second).toBe(`${first}.txt`);
+  });
+});
+
+describe("GET /v/:slug.txt (plain-text report)", () => {
+  const report = (env: Env, slug: string): Promise<Response> =>
+    app.request(`/v/${slug}.txt`, {}, env);
+
+  it("renders a report for a gzipped scan and caches it in R2", async () => {
+    const env = makeEnv();
+    const slug = await slugOf(await upload(env, await gzip(NCDU), { "Content-Encoding": "gzip" }));
+
+    const res = await report(env, slug);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("text/plain");
+    const text = await res.text();
+    expect(text).toContain("/srv");
+    expect(text).toContain("LARGEST FILES");
+    expect(text).toContain("a.txt");
+
+    // The sidecar is written so repeat requests never re-parse the scan.
+    const bucket = env.SCANS as unknown as ReturnType<typeof fakeR2>;
+    expect(bucket.objects.has(`reports/${slug}`)).toBe(true);
+  });
+
+  it("serves the cached copy without touching the scan again", async () => {
+    const env = makeEnv();
+    const slug = await slugOf(await upload(env, NCDU));
+    await report(env, slug);
+
+    // Drop the scan itself; a cache hit must still succeed.
+    const bucket = env.SCANS as unknown as ReturnType<typeof fakeR2>;
+    bucket.objects.delete(slug);
+    const res = await report(env, slug);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("LARGEST FILES");
+  });
+
+  it("works for an identity (non-gzipped) upload", async () => {
+    const env = makeEnv();
+    const slug = await slugOf(await upload(env, NCDU));
+    const res = await report(env, slug);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("b.bin");
+  });
+
+  it("404s for a slug that expired or never existed", async () => {
+    const res = await report(makeEnv(), "doesnotexist123");
+    expect(res.status).toBe(404);
+    expect(await res.text()).toContain("expired");
+  });
+
+  it("rate limits cache misses", async () => {
+    const env = makeEnv({ SUMMARY_LIMITER: { limit: vi.fn(async () => ({ success: false })) } });
+    const slug = await slugOf(await upload(env, NCDU));
+    const res = await report(env, slug);
+    expect(res.status).toBe(429);
+  });
+
+  it("hands non-.txt /v/ requests back to the static assets (the SPA)", async () => {
+    const assets = { fetch: vi.fn(async () => new Response("<!doctype html>index")) };
+    const env = makeEnv({ ASSETS: assets });
+    const res = await app.request("/v/abc123", {}, env);
+    expect(assets.fetch).toHaveBeenCalled();
+    expect(await res.text()).toContain("index");
+  });
+});
+
+describe("DELETE /api/scan/:slug — derived sidecars", () => {
+  it("removes the cached report and summary, not just the scan", async () => {
+    const env = makeEnv();
+    const slug = await slugOf(await upload(env, NCDU));
+    const bucket = env.SCANS as unknown as ReturnType<typeof fakeR2>;
+
+    // Generate both sidecars.
+    await app.request(`/v/${slug}.txt`, {}, env);
+    await postSummary(env, { ...DIGEST, slug });
+    expect(bucket.objects.has(`reports/${slug}`)).toBe(true);
+    expect(bucket.objects.has(`summaries/${slug}`)).toBe(true);
+
+    await app.request(`/api/scan/${slug}`, { method: "DELETE" }, env);
+
+    // The report quotes real paths out of the scan, so it must not outlive it.
+    expect(bucket.objects.has(slug)).toBe(false);
+    expect(bucket.objects.has(`reports/${slug}`)).toBe(false);
+    expect(bucket.objects.has(`summaries/${slug}`)).toBe(false);
+    expect((await app.request(`/v/${slug}.txt`, {}, env)).status).toBe(404);
   });
 });

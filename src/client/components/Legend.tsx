@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ExtEntry } from "../../shared/color";
 import { humanBytes } from "../../shared/format";
 
@@ -6,7 +6,7 @@ interface Props {
   legend: ExtEntry[];
 }
 
-export function Legend({ legend }: Props) {
+export const Legend = memo(function Legend({ legend }: Props) {
   const [open, setOpen] = useState(true);
 
   return (
@@ -38,4 +38,4 @@ export function Legend({ legend }: Props) {
       )}
     </aside>
   );
-}
+});

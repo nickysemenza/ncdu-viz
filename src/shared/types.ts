@@ -32,3 +32,37 @@ export interface ScanMeta {
   /** Total size in bytes. */
   totalSize: number;
 }
+
+/** Summary counters for a scanned tree, surfaced in the header and the digest. */
+export interface ScanStats {
+  totalSize: number;
+  files: number;
+  dirs: number;
+  /** Max edges from the root (root = depth 0). */
+  maxDepth: number;
+  largestLeaf: { name: string; size: number } | null;
+}
+
+/** One row of the Files list: a leaf plus its absolute path. */
+export interface LeafEntry {
+  name: string;
+  size: number;
+  ext: string;
+  /** Absolute path from the scan root. */
+  path: string;
+  /** Hard-link count, if this file is hard-linked (nlink > 1). */
+  nlink?: number;
+  /**
+   * Other in-tree paths that share this file's inode (the dropped hard-link
+   * instances). Present only on the kept row of a hard-linked inode.
+   */
+  links?: string[];
+}
+
+/** A directory plus its absolute path, for "largest directories" listings. */
+export interface DirEntry {
+  name: string;
+  size: number;
+  /** Absolute path from the scan root. */
+  path: string;
+}

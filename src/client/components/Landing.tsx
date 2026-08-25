@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { ParseResult } from "../../shared/ncdu";
+import type { ScanTable } from "../../shared/scanTable";
 import { parseScan, type ParseProgress } from "../parseClient";
 import { uploadScan } from "../upload";
 import type { UploadResponse } from "../../shared/dto";
@@ -14,7 +14,7 @@ export function Landing() {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
-  const [localScan, setLocalScan] = useState<ParseResult | null>(null);
+  const [localScan, setLocalScan] = useState<ScanTable | null>(null);
   // Set only for the bundled example (a public, non-sensitive scan) so it shows the
   // AI summary; real drag-drop "view locally" scans stay sluggless → no summary.
   const [localSlug, setLocalSlug] = useState<string | undefined>(undefined);
@@ -43,7 +43,9 @@ export function Landing() {
     setError(null);
     setBusy({ kind: "parsing", progress: null });
     try {
-      const result = await parseScan(file, (p) => setBusy({ kind: "parsing", progress: p }));
+      const result = await parseScan({ blob: file }, (p) =>
+        setBusy({ kind: "parsing", progress: p }),
+      );
       setLocalSlug(undefined);
       setLocalScan(result);
     } catch (e) {
@@ -56,10 +58,9 @@ export function Landing() {
     setError(null);
     setBusy({ kind: "parsing", progress: null });
     try {
-      const res = await fetch("/example.json");
-      if (!res.ok) throw new Error(`example unavailable (${res.status})`);
-      const blob = await res.blob();
-      const result = await parseScan(blob, (p) => setBusy({ kind: "parsing", progress: p }));
+      const result = await parseScan({ url: "/example.json" }, (p) =>
+        setBusy({ kind: "parsing", progress: p }),
+      );
       setLocalSlug("example"); // stable slug → cached AI summary for the example
       setLocalScan(result);
     } catch (e) {

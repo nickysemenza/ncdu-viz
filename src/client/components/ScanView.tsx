@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ParseResult } from "../../shared/ncdu";
+import type { ScanTable } from "../../shared/scanTable";
 import { parseScan, type ParseProgress } from "../parseClient";
 import { Viewer } from "./Viewer";
 import { ParseOverlay } from "./ParseOverlay";
@@ -10,7 +10,7 @@ interface Props {
 
 /** Fetch a shared scan from /api/scan/:slug, parse it in the worker, and view it. */
 export function ScanView({ slug }: Props) {
-  const [scan, setScan] = useState<ParseResult | null>(null);
+  const [scan, setScan] = useState<ScanTable | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | undefined>(undefined);
   const [progress, setProgress] = useState<ParseProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,12 +19,13 @@ export function ScanView({ slug }: Props) {
     let alive = true;
     void (async () => {
       try {
-        const res = await fetch(`/api/scan/${encodeURIComponent(slug)}`);
-        if (res.status === 404) throw new Error("this scan expired or never existed");
-        if (!res.ok) throw new Error(`failed to load scan (${res.status})`);
-        const expires = res.headers.get("X-Scan-Expires");
-        const blob = await res.blob();
-        const result = await parseScan(blob, (p) => {
+        const url = `/api/scan/${encodeURIComponent(slug)}`;
+        // A HEAD first for the expiry header: the body is streamed and parsed
+        // inside the worker, so the main thread never holds the download.
+        const head = await fetch(url, { method: "HEAD" });
+        if (head.status === 404) throw new Error("this scan expired or never existed");
+        const expires = head.headers.get("X-Scan-Expires");
+        const result = await parseScan({ url }, (p) => {
           if (alive) setProgress(p);
         });
         if (alive) {

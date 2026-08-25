@@ -155,5 +155,7 @@ export async function handleUpload(c: Ctx): Promise<Response> {
   if ((c.req.header("Accept") ?? "").includes("application/json")) {
     return c.json({ url: viewerUrl, slug, expiresAt } satisfies UploadResponse);
   }
-  return c.text(`${viewerUrl}\n`);
+  // The first line stays exactly the viewer URL — scripts pipe this into a
+  // variable — with the plain-text report offered on the line after it.
+  return c.text(`${viewerUrl}\n${viewerUrl}.txt\n`);
 }

@@ -1,5 +1,3 @@
-import type { ScanNode } from "./types";
-
 /** Neutral bucket for extensions outside the top-N. */
 export const OTHER_COLOR = "#64748b"; // slate-500
 export const OTHER_LABEL = "other";
@@ -44,43 +42,33 @@ export interface ExtColors {
   /** Legend rows (top-N extensions + an "other" aggregate), sorted by total desc. */
   legend: ExtEntry[];
   colorFor: (ext: string | undefined) => string;
+  /** Color per extension id, for coloring cells straight off the table. */
+  extColor: string[];
 }
 
 /**
- * Map each directory node to the extension of its single largest leaf
- * descendant — used to color a collapsed/aggregated directory cell so it still
- * reads as "mostly <type>". One O(n) post-order pass.
+ * Assign palette colors from precomputed per-extension totals.
+ *
+ * Previously this walked the whole tree to aggregate leaf sizes. The parser now
+ * accumulates those totals as it goes, so this is a sort of a few thousand
+ * entries with no traversal at all.
+ *
+ * `extCounts` distinguishes an extension no leaf ever had from one whose leaves
+ * were all empty — index 0 ("") is reserved before parsing begins, so it would
+ * otherwise show up in the legend on scans that have no extension-less files.
  */
-export function largestLeafExt(root: ScanNode): Map<ScanNode, string> {
-  const map = new Map<ScanNode, string>();
-  const walk = (n: ScanNode): { ext: string; size: number } => {
-    if (!n.isDir) return { ext: n.ext ?? "", size: n.size };
-    let best = { ext: "", size: -1 };
-    for (const child of n.children ?? []) {
-      const r = walk(child);
-      if (r.size > best.size) best = r;
-    }
-    map.set(n, best.ext);
-    return best;
-  };
-  walk(root);
-  return map;
-}
-
-/** Aggregate leaf sizes per extension and assign the top-N a palette color. */
-export function buildExtColors(root: ScanNode): ExtColors {
-  const totals = new Map<string, number>();
-  const walk = (n: ScanNode): void => {
-    if (n.isDir) {
-      n.children?.forEach(walk);
-    } else {
-      const ext = n.ext ?? "";
-      totals.set(ext, (totals.get(ext) ?? 0) + n.size);
-    }
-  };
-  walk(root);
-
-  const sorted = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+export function buildExtColors(
+  extTable: readonly string[],
+  extTotals: ArrayLike<number>,
+  extCounts: ArrayLike<number>,
+): ExtColors {
+  const used: [string, number][] = [];
+  for (let id = 0; id < extTable.length; id++) {
+    if (extCounts[id] === 0) continue;
+    used.push([extTable[id] ?? "", extTotals[id]]);
+  }
+  // Stable sort over first-seen order, matching a pre-order walk of the leaves.
+  const sorted = used.sort((a, b) => b[1] - a[1]);
   const top = sorted.slice(0, MAX_LEGEND_EXTS);
 
   const map = new Map<string, string>();
@@ -97,5 +85,10 @@ export function buildExtColors(root: ScanNode): ExtColors {
 
   const colorFor = (ext: string | undefined): string => map.get(ext ?? "") ?? OTHER_COLOR;
 
-  return { map, legend, colorFor };
+  // Indexed by extension id so a cell's fill is an array read, not a Map lookup
+  // on a string that would have to be decoded first.
+  const extColor: string[] = [];
+  for (let id = 0; id < extTable.length; id++) extColor.push(colorFor(extTable[id]));
+
+  return { map, legend, colorFor, extColor };
 }

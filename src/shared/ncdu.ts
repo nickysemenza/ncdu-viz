@@ -1,8 +1,19 @@
 import { z } from "zod";
-import type { ScanMeta, ScanNode } from "./types";
+import type { DirEntry, LeafEntry, ScanMeta, ScanNode, ScanStats } from "./types";
+import { extOf } from "./path";
 import { joinSegments } from "./path";
 
 /**
+ * Reference implementation of the ncdu `-o` parser — **test-only**.
+ *
+ * The application parses scans with `scanParse.ts` into a flat `ScanTable`; this
+ * pointer-tree version is retained solely as the oracle the streaming parser and
+ * the table queries are differentially tested against. Keeping it around is what
+ * lets `scanParse.test.ts` and `scanQuery.test.ts` assert agreement node-for-node
+ * rather than merely asserting plausible-looking numbers.
+ *
+ * Nothing under `src/client` or `src/worker` imports it, so it is not bundled.
+ *
  * Defensive, hand-rolled parser for the ncdu `-o` JSON export.
  *
  * Design notes:
@@ -52,12 +63,8 @@ function leafSize(obj: Record<string, unknown>): number {
   return 0;
 }
 
-/** Lowercased extension without the leading dot; "" for no extension or dotfiles. */
-export function extOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  if (dot <= 0) return ""; // no dot, or leading-dot dotfile (e.g. ".bashrc")
-  return name.slice(dot + 1).toLowerCase();
-}
+// extOf moved to ./path so this module can stay test-only.
+export { extOf } from "./path";
 
 /** Narrow an unknown JSON value to a plain (non-array) object, or null. */
 function asObject(v: unknown): Record<string, unknown> | null {
@@ -163,29 +170,11 @@ export function parseNcdu(raw: unknown): ParseResult {
   };
 }
 
-export interface ScanStats {
-  totalSize: number;
-  files: number;
-  dirs: number;
-  /** Max edges from the root (root = depth 0). */
-  maxDepth: number;
-  largestLeaf: { name: string; size: number } | null;
-}
+// ScanStats now lives in ./types so the flat table can use it without pulling in
+// this module. Re-exported here to keep existing import sites working.
+export type { ScanStats } from "./types";
 
-export interface LeafEntry {
-  name: string;
-  size: number;
-  ext: string;
-  /** Absolute path from the scan root. */
-  path: string;
-  /** Hard-link count, if this file is hard-linked (nlink > 1). */
-  nlink?: number;
-  /**
-   * Other in-tree paths that share this file's inode (the dropped hard-link
-   * instances). Present only on the kept row of a hard-linked inode.
-   */
-  links?: string[];
-}
+export type { LeafEntry } from "./types";
 
 /**
  * Collect every leaf under `focus`, sorted by size descending. `focusSegments`
@@ -241,12 +230,7 @@ export function flattenLeaves(focus: ScanNode, focusSegments: string[]): LeafEnt
   return out;
 }
 
-export interface DirEntry {
-  name: string;
-  size: number;
-  /** Absolute path from the scan root. */
-  path: string;
-}
+export type { DirEntry } from "./types";
 
 /** The `limit` largest directories under `root` (excluding root itself), by size. */
 export function topDirs(root: ScanNode, limit: number): DirEntry[] {

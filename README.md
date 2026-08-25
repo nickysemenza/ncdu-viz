@@ -12,9 +12,17 @@ live in R2 and auto-expire after 7 days.
 Two ingest paths, both returning a shareable viewer URL:
 
 ```bash
-# pipe from a headless server
-ncdu -o- / | gzip | curl -s --data-binary @- \
+# pipe from a headless server (-t 8: ncdu is single-threaded by default and a
+# large scan is stat-latency bound, so threading it is a several-fold speedup)
+ncdu -o- -t 8 / | gzip | curl -s --data-binary @- \
   -H "Content-Encoding: gzip" https://ncdu-viz.nickysemenza.com/api/upload
+```
+
+Upload prints the viewer URL and a plain-text report URL. The report needs no
+browser, so a headless box can read its own scan back:
+
+```bash
+curl https://ncdu-viz.nickysemenza.com/v/<slug>.txt
 ```
 
 …or drag-drop a `file.json` (optionally gzipped) in the browser — with a

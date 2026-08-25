@@ -1,26 +1,29 @@
-import type { ParseResult } from "../shared/ncdu";
-import { flattenLeaves, summarize, topDirs } from "../shared/ncdu";
-import { buildExtColors } from "../shared/color";
+import type { ScanTable } from "../shared/scanTable";
 import { SummaryResponseSchema, type SummaryDigest } from "../shared/dto";
 
 const TOP = 15;
 
-/** Build the compact digest the summary endpoint needs from a parsed scan. */
-export function buildDigest(slug: string, scan: ParseResult): SummaryDigest {
-  const { root, meta } = scan;
-  const stats = summarize(root);
-  const { legend } = buildExtColors(root);
+/**
+ * Assemble the digest the summary endpoint needs.
+ *
+ * This used to run four full-tree walks on the main thread — `summarize`,
+ * `buildExtColors`, `flattenLeaves` and `topDirs` — of which `flattenLeaves`
+ * materialized one object and one joined path string per leaf and sorted the
+ * lot, to keep fifteen. On a multi-million-node scan that alone was the single
+ * largest stall in loading a shared scan. All of it is now computed in the parse
+ * worker as the bytes stream past, so this is pure field shuffling.
+ */
+export function buildDigest(slug: string, table: ScanTable): SummaryDigest {
+  const { meta, stats, digest } = table;
   return {
     slug,
     root: meta.root,
     totalSize: stats.totalSize,
     files: stats.files,
     dirs: stats.dirs,
-    topExtensions: legend.slice(0, TOP).map((e) => ({ ext: e.ext, total: e.total })),
-    largestFiles: flattenLeaves(root, [meta.root])
-      .slice(0, TOP)
-      .map((l) => ({ path: l.path, size: l.size })),
-    largestDirs: topDirs(root, TOP).map((d) => ({ path: d.path, size: d.size })),
+    topExtensions: digest.topExtensions.slice(0, TOP).map((e) => ({ ext: e.ext, total: e.total })),
+    largestFiles: digest.largestFiles.slice(0, TOP).map((f) => ({ path: f.path, size: f.size })),
+    largestDirs: digest.largestDirs.slice(0, TOP).map((d) => ({ path: d.path, size: d.size })),
   };
 }
 

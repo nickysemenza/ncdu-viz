@@ -1,14 +1,14 @@
-import { useMemo } from "react";
-import type { LeafEntry } from "../../shared/ncdu";
+import { memo } from "react";
+import type { LeafEntry } from "../../shared/types";
 import { humanBytes } from "../../shared/format";
 
 interface Props {
+  /** Already limited to the rows worth rendering, largest first. */
   leaves: LeafEntry[];
+  /** Every non-duplicate file under the current focus, for the "of N" count. */
+  totalFiles: number;
   colorFor: (ext: string | undefined) => string;
 }
-
-/** Cap rendered rows so a million-file scan can't blow up the DOM. */
-const MAX_ROWS = 1000;
 
 /** Last two path segments — "<parent>/<name>" — enough context without the deep prefix. */
 function tail(path: string): { parent: string; name: string } {
@@ -27,8 +27,9 @@ function hardlinkTitle(leaf: LeafEntry): string {
   return `${head}\nOther links are outside this scan.`;
 }
 
-export function FilesList({ leaves, colorFor }: Props) {
-  const shown = useMemo(() => leaves.slice(0, MAX_ROWS), [leaves]);
+export const FilesList = memo(function FilesList({ leaves, totalFiles, colorFor }: Props) {
+  // Selection is bounded upstream now, so there is nothing left to slice here.
+  const shown = leaves;
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-graphite-950">
@@ -69,10 +70,10 @@ export function FilesList({ leaves, colorFor }: Props) {
         })}
       </div>
       <div className="border-t border-graphite-700 px-3 py-1.5 font-mono text-xs text-zinc-600">
-        {leaves.length > MAX_ROWS
-          ? `showing the ${MAX_ROWS.toLocaleString()} largest of ${leaves.length.toLocaleString()} files`
-          : `${leaves.length.toLocaleString()} files, largest first`}
+        {totalFiles > shown.length
+          ? `showing the ${shown.length.toLocaleString()} largest of ${totalFiles.toLocaleString()} files`
+          : `${totalFiles.toLocaleString()} files, largest first`}
       </div>
     </div>
   );
-}
+});

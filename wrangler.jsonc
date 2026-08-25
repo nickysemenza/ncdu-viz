@@ -12,7 +12,9 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     // API routes hit the Worker first; everything else is served from static assets (SPA).
-    "run_worker_first": ["/api/*"],
+    // `/v/*` is included so `/v/<slug>.txt` can return the plain-text report; the
+    // Worker hands every other `/v/` request straight back to ASSETS.
+    "run_worker_first": ["/api/*", "/v/*"],
   },
   "r2_buckets": [
     {
@@ -24,6 +26,14 @@
       "preview_bucket_name": "ncdu-viz-scans",
     },
   ],
+  // Rendering a plain-text report streams and parses the whole scan, which is far
+  // more CPU than the 30s default allows for a large one. Memory is fine: the
+  // aggregate pass keeps only a depth-bounded stack (~8 MB for a 394 MB scan),
+  // well under the 128 MB per-isolate cap.
+  "limits": {
+    "cpu_ms": 120000,
+  },
+
   // Workers AI (one binding per Worker). Used by POST /api/summary.
   "ai": {
     "binding": "AI",

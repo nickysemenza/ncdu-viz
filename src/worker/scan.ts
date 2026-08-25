@@ -45,10 +45,19 @@ export async function handleScan(c: Ctx): Promise<Response> {
 /**
  * DELETE /api/scan/:slug — remove a scan immediately. No auth: anyone with the
  * link can already view it, so anyone with the link may delete it (idempotent).
+ *
+ * The derived sidecars go too. Both the AI summary and the plain-text report
+ * quote real paths out of the scan, so leaving them behind would break the
+ * promise the delete button makes — the scan would 404 while its contents were
+ * still readable.
  */
 export async function handleDelete(c: Ctx): Promise<Response> {
   const slug = c.req.param("slug");
   if (!slug) return c.text("not found\n", 404);
-  await c.env.SCANS.delete(slug);
+  await Promise.all([
+    c.env.SCANS.delete(slug),
+    c.env.SCANS.delete(`summaries/${slug}`),
+    c.env.SCANS.delete(`reports/${slug}`),
+  ]);
   return c.body(null, 204);
 }
