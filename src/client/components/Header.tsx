@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ScanMeta } from "../../shared/types";
 import { humanBytes, relativeExpiry } from "../../shared/format";
 import { GithubLink } from "./GithubLink";
@@ -17,7 +17,13 @@ function formatDate(unixSeconds?: number): string | null {
   return new Date(unixSeconds * 1000).toISOString().slice(0, 10);
 }
 
-export function Header({ meta, fileCount, dirCount, expiresAt, onDelete }: Props) {
+export const Header = memo(function Header({
+  meta,
+  fileCount,
+  dirCount,
+  expiresAt,
+  onDelete,
+}: Props) {
   const date = formatDate(meta.scannedAt);
   return (
     <header className="flex items-baseline gap-4 border-b border-graphite-700 bg-graphite-900 px-3 py-2">
@@ -46,7 +52,7 @@ export function Header({ meta, fileCount, dirCount, expiresAt, onDelete }: Props
       <GithubLink className="self-center" />
     </header>
   );
-}
+});
 
 function DeleteButton({ onDelete }: { onDelete: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);

@@ -1,26 +1,30 @@
 import * as Comlink from "comlink";
-import type { ParseResult } from "../shared/ncdu";
-import type { ParseProgress, ProgressFn } from "../shared/decode";
+import type { ParseProgress, ProgressFn, ScanSource } from "../shared/decode";
+import { ScanTable } from "../shared/scanTable";
 import type { ParseApi } from "./parse.worker";
 
-export type { ParseProgress } from "../shared/decode";
+export type { ParseProgress, ScanSource } from "../shared/decode";
 
 /**
- * Run decompression + parsing in a dedicated Web Worker so large scans never
- * block the main thread. A fresh worker per call keeps memory bounded (the
- * worker is terminated once its tree has been transferred back).
+ * Decompress, parse and index a scan in a dedicated Web Worker, returning a
+ * `ScanTable` view over the transferred buffers.
+ *
+ * A fresh worker per call keeps memory bounded: it is terminated as soon as the
+ * payload has been transferred out, so the parser's transient allocations go
+ * with it. Nothing is copied on the way back — see `parse.worker.ts`.
  */
 export async function parseScan(
-  source: Blob,
+  source: ScanSource,
   onProgress?: (p: ParseProgress) => void,
-): Promise<ParseResult> {
+): Promise<ScanTable> {
   const worker = new Worker(new URL("./parse.worker.ts", import.meta.url), {
     type: "module",
   });
   try {
     const api = Comlink.wrap<ParseApi>(worker);
     const progress: ProgressFn | undefined = onProgress ? Comlink.proxy(onProgress) : undefined;
-    return await api.parse(source, progress);
+    const payload = await api.parse(source, progress);
+    return new ScanTable(payload);
   } finally {
     worker.terminate();
   }

@@ -7,9 +7,8 @@ interface Props {
 }
 
 const PHASE_LABEL: Record<ParseProgress["phase"], string> = {
-  reading: "Decompressing & reading",
-  parsing: "Parsing JSON",
-  building: "Building tree",
+  reading: "Reading & parsing",
+  building: "Building index",
 };
 
 export function ParseOverlay({ progress, error }: Props) {
@@ -26,7 +25,10 @@ export function ParseOverlay({ progress, error }: Props) {
             {progress ? PHASE_LABEL[progress.phase] : "Loading…"}
           </span>
           {progress && progress.bytes > 0 && (
-            <span className="text-zinc-600 tabular-nums">{humanBytes(progress.bytes)} read</span>
+            <span className="text-zinc-600 tabular-nums">
+              {humanBytes(progress.bytes)} read
+              {progress.nodes > 0 && ` · ${progress.nodes.toLocaleString()} entries`}
+            </span>
           )}
         </>
       )}

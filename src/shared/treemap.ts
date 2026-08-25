@@ -1,3 +1,15 @@
+/**
+ * Full d3-hierarchy treemap over the pointer tree — **test-only**.
+ *
+ * The application lays out scans with `scanLayout.ts`, which drives d3's
+ * `treemapSquarify` directly over the flat table and prunes by depth and area.
+ * This version is retained as the oracle that `scanLayout.test.ts` compares
+ * against rect-for-rect, which is what pins the claim that pruning yields a
+ * strict subset of the full layout rather than an approximation.
+ *
+ * Nothing under `src/client` or `src/worker` imports it, so it is not bundled.
+ */
+
 import { hierarchy, treemap, treemapSquarify } from "d3-hierarchy";
 import type { ScanNode } from "./types";
 

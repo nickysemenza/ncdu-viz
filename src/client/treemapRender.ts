@@ -1,59 +1,32 @@
-import type { ScanNode } from "../shared/types";
-import type { TreemapLayout, TreemapRect } from "../shared/treemap";
+import type { Cell } from "../shared/scanLayout";
 
 export interface DrawOptions {
-  /** Resolve a cell's fill from its node (leaf → its ext; collapsed dir → dominant ext). */
-  colorOf: (node: ScanNode) => string;
+  /** Resolve a cell's fill from its node index. */
+  colorOf: (index: number) => string;
   /** CSS pixel dimensions (the context is already DPR-scaled). */
   width: number;
   height: number;
-  /** Hovered cell + its enclosing immediate-child group, for the highlight rings. */
-  hover?: { cell: TreemapRect; group: TreemapRect | undefined };
 }
 
 /** Cells smaller than this (in CSS px²) are not worth drawing. */
 const MIN_CELL_AREA = 1;
 
-const rectArea = (r: TreemapRect): number => (r.x1 - r.x0) * (r.y1 - r.y0);
-
-/** A rect is a leaf cell if its node has no drawable children. */
-function isLeafRect(r: TreemapRect): boolean {
-  return !r.node.isDir || (r.node.children?.length ?? 0) === 0;
-}
+const rectArea = (c: Cell): number => (c.x1 - c.x0) * (c.y1 - c.y0);
 
 /**
- * The set of cells to draw at a given detail depth: every leaf at-or-above
- * `maxDepth`, plus every directory sitting exactly at `maxDepth` (drawn as one
- * aggregated cell). These tile the focus rect with no overlap.
+ * Render the treemap cells: cushion-shaded rectangles.
+ *
+ * The hover rings are deliberately not drawn here. Canvas is immediate-mode, so
+ * including them would mean repainting every cell — each with its own gradient —
+ * on every mousemove. They live on a separate overlay canvas instead; see
+ * `drawHover`.
  */
-export function frontier(layout: TreemapLayout, maxDepth: number): TreemapRect[] {
-  return layout.nodes.filter((r) => (isLeafRect(r) ? r.depth <= maxDepth : r.depth === maxDepth));
-}
-
-/** The frontier cell + ancestor chain under a point (for hover/drill). */
-export function frontierAt(
-  layout: TreemapLayout,
-  maxDepth: number,
-  x: number,
-  y: number,
-): { chain: TreemapRect[]; cell: TreemapRect | undefined } {
-  const chain = layout.nodes
-    .filter((r) => x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1)
-    .sort((a, b) => a.depth - b.depth);
-  let cell: TreemapRect | undefined;
-  for (const r of chain) {
-    if (isLeafRect(r) ? r.depth <= maxDepth : r.depth === maxDepth) cell = r;
-  }
-  return { chain, cell };
-}
-
-/** Render the treemap frontier: cushion-shaded cells + hover rings. */
 export function drawTreemap(
   ctx: CanvasRenderingContext2D,
-  cells: TreemapRect[],
+  cells: readonly Cell[],
   opts: DrawOptions,
 ): void {
-  const { colorOf, width, height, hover } = opts;
+  const { colorOf, width, height } = opts;
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#0a0a0b";
@@ -61,15 +34,13 @@ export function drawTreemap(
 
   for (const cell of cells) {
     if (rectArea(cell) < MIN_CELL_AREA) continue;
-    drawCushion(ctx, cell, colorOf(cell.node), !isLeafRect(cell));
+    drawCushion(ctx, cell, colorOf(cell.index), cell.collapsed);
   }
-
-  if (hover?.cell) drawHover(ctx, hover.cell, hover.group);
 }
 
 function drawCushion(
   ctx: CanvasRenderingContext2D,
-  r: TreemapRect,
+  r: Cell,
   base: string,
   collapsed: boolean,
 ): void {
@@ -96,10 +67,11 @@ function drawCushion(
   }
 }
 
-function drawHover(
+/** Hover rings, drawn onto the transparent overlay canvas. */
+export function drawHover(
   ctx: CanvasRenderingContext2D,
-  cell: TreemapRect,
-  group: TreemapRect | undefined,
+  cell: Cell,
+  group: Cell | undefined,
 ): void {
   if (group && group !== cell) {
     ctx.strokeStyle = "rgba(96,165,250,0.9)";

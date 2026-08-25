@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { decodeScan, type ParseProgress } from "./decode";
-import { summarize } from "./ncdu";
 
 const sampleBytes = readFileSync(
   fileURLToPath(new URL("../../fixtures/sample.json", import.meta.url)),
@@ -22,26 +21,39 @@ async function gzip(bytes: Uint8Array): Promise<Uint8Array> {
 
 describe("decodeScan", () => {
   it("parses a plain (uncompressed) ncdu blob", async () => {
-    const result = await decodeScan(new Blob([sampleBytes]));
-    expect(summarize(result.root).totalSize).toBe(57344);
-    expect(result.meta.root).toBe("/private/tmp/ncdu-fix");
+    const payload = await decodeScan({ blob: new Blob([sampleBytes]) });
+    expect(payload.stats.totalSize).toBe(57344);
+    expect(payload.meta.root).toBe("/private/tmp/ncdu-fix");
   });
 
   it("sniffs gzip magic bytes and inflates a gzipped blob to the same tree", async () => {
     const gz = await gzip(sampleBytes);
     expect(gz[0]).toBe(0x1f);
     expect(gz[1]).toBe(0x8b);
-    const result = await decodeScan(new Blob([gz]));
-    const stats = summarize(result.root);
-    expect(stats.totalSize).toBe(57344);
-    expect(stats.files).toBe(6);
+    const payload = await decodeScan({ blob: new Blob([gz]) });
+    expect(payload.stats.totalSize).toBe(57344);
+    expect(payload.stats.files).toBe(6);
   });
 
-  it("reports progress phases", async () => {
+  it("reports progress, ending with the build phase", async () => {
     const phases: ParseProgress["phase"][] = [];
-    await decodeScan(new Blob([sampleBytes]), (p) => phases.push(p.phase));
-    expect(phases).toContain("reading");
-    expect(phases).toContain("parsing");
+    await decodeScan({ blob: new Blob([sampleBytes]) }, (p) => phases.push(p.phase));
+    // Reading and parsing are one pass now, so "building" is the only guaranteed
+    // report on a small input — a big scan also emits throttled "reading" ticks.
     expect(phases.at(-1)).toBe("building");
+  });
+
+  it("surfaces node counts through progress", async () => {
+    let last: ParseProgress | null = null;
+    await decodeScan({ blob: new Blob([sampleBytes]) }, (p) => {
+      last = p;
+    });
+    expect(last).not.toBeNull();
+    expect(last!.nodes).toBe(10);
+    expect(last!.sourceBytes).toBe(sampleBytes.byteLength);
+  });
+
+  it("rejects a body that is not an ncdu export", async () => {
+    await expect(decodeScan({ blob: new Blob(["not json at all"]) })).rejects.toThrow();
   });
 });

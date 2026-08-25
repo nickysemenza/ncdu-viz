@@ -6,7 +6,9 @@ interface Props {
 
 export function CurlRecipe({ origin }: Props) {
   const [copied, setCopied] = useState(false);
-  const recipe = `ncdu -o- / | gzip | \\
+  // -t 8 matters: ncdu is single-threaded by default and a home-directory scan is
+  // bound by stat latency, not CPU, so threading it is worth several minutes.
+  const recipe = `ncdu -o- -t 8 / | gzip | \\
   curl -s --data-binary @- -H "Content-Encoding: gzip" \\
   ${origin}/api/upload`;
 

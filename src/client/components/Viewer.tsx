@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ParseResult } from "../../shared/ncdu";
-import { flattenLeaves, summarize } from "../../shared/ncdu";
-import { buildExtColors, largestLeafExt } from "../../shared/color";
-import { depthStats } from "../../shared/treemap";
+import type { ScanTable } from "../../shared/scanTable";
+import { buildExtColors } from "../../shared/color";
+import { depthStats, topLeaves } from "../../shared/scanQuery";
 import { humanBytes } from "../../shared/format";
-import type { ScanNode } from "../../shared/types";
 import { buildDigest, requestSummary } from "../summary";
 import { Header } from "./Header";
 import { Breadcrumb } from "./Breadcrumb";
@@ -15,8 +13,11 @@ import { TreemapCanvas, type HoverInfo } from "./TreemapCanvas";
 
 type View = "treemap" | "files";
 
+/** Rows the Files list will render; also the cap on what gets materialized. */
+const MAX_FILE_ROWS = 1000;
+
 interface Props {
-  scan: ParseResult;
+  scan: ScanTable;
   /** Shared scans only: slug enables the auto-generated AI summary banner. */
   slug?: string;
   /** Shared scans only: expiry timestamp + delete action (omitted for local view). */
@@ -25,12 +26,16 @@ interface Props {
 }
 
 export function Viewer({ scan, slug, expiresAt, onDelete }: Props) {
-  const { root, meta } = scan;
-  const stats = useMemo(() => summarize(root), [root]);
-  const colors = useMemo(() => buildExtColors(root), [root]);
-  const domExt = useMemo(() => largestLeafExt(root), [root]);
+  const table = scan;
+  const { meta, stats } = table;
+  // Totals and per-extension sizes arrive precomputed from the parse worker, so
+  // none of this walks the tree.
+  const colors = useMemo(
+    () => buildExtColors(table.p.extTable, table.p.extTotals, table.p.extCounts),
+    [table],
+  );
 
-  const [focusPath, setFocusPath] = useState<ScanNode[]>([root]);
+  const [focusPath, setFocusPath] = useState<number[]>([table.rootIndex]);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [view, setView] = useState<View>("treemap");
   const [depth, setDepth] = useState(1);
@@ -42,9 +47,9 @@ export function Viewer({ scan, slug, expiresAt, onDelete }: Props) {
 
   // Reset focus + hover when a new scan is loaded.
   useEffect(() => {
-    setFocusPath([root]);
+    setFocusPath([table.rootIndex]);
     setHover(null);
-  }, [root]);
+  }, [table]);
 
   // Shared scans: auto-generate the AI summary on load (cached server-side by slug,
   // so viewing an existing/older scan returns instantly without re-running inference).
@@ -60,29 +65,32 @@ export function Viewer({ scan, slug, expiresAt, onDelete }: Props) {
     };
   }, [slug, scan]);
 
-  const focus = focusPath[focusPath.length - 1] ?? root;
-  const focusSegments = useMemo(() => focusPath.map((n) => n.name), [focusPath]);
+  const focus = focusPath[focusPath.length - 1] ?? table.rootIndex;
+  const crumbs = useMemo(() => focusPath.map((i) => table.nameOf(i)), [focusPath, table]);
 
   // Depth range + adaptive default per focus; re-default the slider on drill.
-  const { maxDepth, suggested } = useMemo(() => depthStats(focus), [focus]);
+  // A linear scan over the focus's contiguous index range, not a tree walk.
+  const { maxDepth, suggested } = useMemo(() => depthStats(table, focus), [table, focus]);
   useEffect(() => {
     setDepth(suggested);
   }, [suggested]);
   const clampedDepth = Math.min(depth, maxDepth);
 
-  // Collapsed directory cells are colored by their dominant (largest-leaf) ext.
+  // Collapsed directory cells are colored by their dominant (largest-leaf) ext,
+  // which the parser precomputed into a column — so this is an array read.
   const colorOf = useCallback(
-    (node: ScanNode) => colors.colorFor(node.isDir ? domExt.get(node) : node.ext),
-    [colors, domExt],
+    (index: number) => colors.extColor[table.displayExtIdOf(index)] ?? colors.colorFor(undefined),
+    [colors, table],
   );
 
-  // Only flatten when the Files view is active (cheap to skip for big trees).
-  const leaves = useMemo(
-    () => (view === "files" ? flattenLeaves(focus, focusSegments) : []),
-    [view, focus, focusSegments],
+  // Bounded selection: only the rows the list can show are materialized, rather
+  // than every leaf in the subtree.
+  const files = useMemo(
+    () => (view === "files" ? topLeaves(table, focus, MAX_FILE_ROWS) : null),
+    [view, table, focus],
   );
 
-  const onDrill = useCallback((path: ScanNode[]) => {
+  const onDrill = useCallback((path: number[]) => {
     if (path.length > 0) setFocusPath((p) => [...p, ...path]);
   }, []);
   const onJump = useCallback((i: number) => {
@@ -99,7 +107,7 @@ export function Viewer({ scan, slug, expiresAt, onDelete }: Props) {
         onDelete={onDelete}
       />
       <div className="flex items-center justify-between gap-4 border-b border-graphite-700 bg-graphite-900 pr-3">
-        <Breadcrumb path={focusPath} onJump={onJump} />
+        <Breadcrumb labels={crumbs} onJump={onJump} />
         <div className="flex shrink-0 items-center gap-4">
           {view === "treemap" && maxDepth >= 2 && (
             <DepthSlider value={clampedDepth} max={maxDepth} onChange={setDepth} />
@@ -127,15 +135,19 @@ export function Viewer({ scan, slug, expiresAt, onDelete }: Props) {
         <div className="min-h-0 min-w-0 flex-1">
           {view === "treemap" ? (
             <TreemapCanvas
+              table={table}
               focus={focus}
-              focusSegments={focusSegments}
               maxDepth={clampedDepth}
               colorOf={colorOf}
               onHover={setHover}
               onDrill={onDrill}
             />
           ) : (
-            <FilesList leaves={leaves} colorFor={colors.colorFor} />
+            <FilesList
+              leaves={files?.rows ?? []}
+              totalFiles={files?.totalFiles ?? 0}
+              colorFor={colors.colorFor}
+            />
           )}
         </div>
         <div className="w-56 shrink-0">
@@ -146,8 +158,8 @@ export function Viewer({ scan, slug, expiresAt, onDelete }: Props) {
         hover={hover}
         placeholder={
           view === "treemap"
-            ? `${humanBytes(focus.size)} · ${stats.files.toLocaleString()} files · click a region to drill in`
-            : `${humanBytes(focus.size)} · largest files first`
+            ? `${humanBytes(table.sizeOf(focus))} · ${stats.files.toLocaleString()} files · click a region to drill in`
+            : `${humanBytes(table.sizeOf(focus))} · largest files first`
         }
       />
     </div>

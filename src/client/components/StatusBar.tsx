@@ -17,12 +17,10 @@ export function StatusBar({ hover, placeholder }: Props) {
           <span className="flex-1 truncate">
             <span className="text-zinc-600">{path.dir}</span>
             <span className="text-zinc-100">{path.name}</span>
-            {hover.node.isDir && <span className="text-zinc-600">/</span>}
+            {hover.isDir && <span className="text-zinc-600">/</span>}
           </span>
-          {hover.node.isDir && (
-            <span className="shrink-0 text-zinc-600">dir · click to drill in</span>
-          )}
-          <span className="shrink-0 text-zinc-300 tabular-nums">{humanBytes(hover.node.size)}</span>
+          {hover.isDir && <span className="shrink-0 text-zinc-600">dir · click to drill in</span>}
+          <span className="shrink-0 text-zinc-300 tabular-nums">{humanBytes(hover.size)}</span>
         </>
       ) : (
         <span className="text-zinc-600">{placeholder}</span>
