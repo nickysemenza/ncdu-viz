@@ -1,6 +1,24 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
+  "extends": ["config:recommended"],
+  "automerge": false,
+  "automergeType": "pr",
+  "platformAutomerge": false,
+  "ignoreTests": false,
+  "internalChecksAsSuccess": false,
+  "packageRules": [
+    {
+      "description": "Automerge dependency updates only through a PR with passing checks",
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "pinDigest",
+        "lockFileMaintenance"
+      ],
+      "automerge": true
+    }
   ]
 }
